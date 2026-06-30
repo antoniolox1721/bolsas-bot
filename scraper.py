@@ -41,34 +41,110 @@ REQUEST_TIMEOUT = 30
 # CORE      -> high precision, almost certainly Electrical Engineering (DEEC).
 # RELATED   -> sub-areas of DEEC; broader, may occasionally over-match.
 # Tune these freely; the bot reports which keyword matched so you can calibrate.
-CORE_KEYWORDS = [
-    "engenharia eletrotecnica",
-    "engenharia electrotecnica",
-    "eletrotecnica",
-    "electrotecnica",
-    "meec",          # Mestrado em Eng. Eletrotecnica e de Computadores
-    "leec",          # Licenciatura "
-    "deec",          # Departamento "
-]
+# Each engineering area is a profile with a friendly label and two keyword
+# lists: `core` (high precision) and `related` (broader sub-areas). The active
+# area is chosen at runtime via the bot's !area command.
+AREA_PROFILES: dict[str, dict] = {
+    "eletrotecnica": {
+        "label": "Engenharia Eletrotécnica",
+        "core": ["engenharia eletrotecnica", "engenharia electrotecnica",
+                 "eletrotecnica", "electrotecnica", "meec", "leec", "deec"],
+        "related": ["eletronica", "electronica", "microeletronica",
+                    "telecomunicacoes", "sistemas de energia", "energia eletrica",
+                    "redes de energia", "maquinas eletricas", "acionamentos",
+                    "eletronica de potencia", "processamento de sinal",
+                    "sistemas de decisao e controlo", "instrumentacao", "fotonica"],
+    },
+    "informatica": {
+        "label": "Engenharia Informática e de Computadores",
+        "core": ["engenharia informatica", "informatica", "leic", "meic",
+                 "ciencia de computadores", "ciencias da computacao"],
+        "related": ["machine learning", "aprendizagem automatica",
+                    "inteligencia artificial", "redes de computadores",
+                    "base de dados", "bases de dados", "seguranca informatica",
+                    "algoritmos", "sistemas distribuidos", "engenharia de computadores"],
+    },
+    "mecanica": {
+        "label": "Engenharia Mecânica",
+        "core": ["engenharia mecanica", "mecanica", "memec"],
+        "related": ["termodinamica", "mecanica dos fluidos", "transferencia de calor",
+                    "mecanica estrutural", "elementos finitos", "vibracoes",
+                    "automovel", "manufatura", "fabrico", "projeto mecanico",
+                    "sistemas mecanicos"],
+    },
+    "aeroespacial": {
+        "label": "Engenharia Aeroespacial",
+        "core": ["engenharia aeroespacial", "aeroespacial", "aeronautica"],
+        "related": ["aerodinamica", "avionica", "uav", "satelite", "espaco",
+                    "propulsao", "voo", "drone"],
+    },
+    "civil": {
+        "label": "Engenharia Civil",
+        "core": ["engenharia civil", "civil"],
+        "related": ["estruturas", "geotecnia", "hidraulica", "construcao",
+                    "betao", "urbanismo", "transportes", "vias", "ambiente construido"],
+    },
+    "materiais": {
+        "label": "Engenharia de Materiais",
+        "core": ["engenharia de materiais", "engenharia dos materiais", "materiais",
+                 "ciencia dos materiais"],
+        "related": ["metalurgia", "polimeros", "ceramicos", "compositos",
+                    "nanomateriais", "corrosao"],
+    },
+    "fisica": {
+        "label": "Engenharia Física Tecnológica",
+        "core": ["engenharia fisica", "engenharia fisica tecnologica", "fisica",
+                 "fisica tecnologica"],
+        "related": ["optica", "laser", "plasma", "nuclear", "fotonica",
+                    "quantica", "particulas"],
+    },
+    "quimica": {
+        "label": "Engenharia Química",
+        "core": ["engenharia quimica", "quimica", "engenharia biologica"],
+        "related": ["processos quimicos", "catalise", "reatores", "termoquimica",
+                    "biotecnologia"],
+    },
+    "biomedica": {
+        "label": "Engenharia Biomédica",
+        "core": ["engenharia biomedica", "biomedica"],
+        "related": ["biomedicina", "imagem medica", "sinais biomedicos",
+                    "biomateriais", "instrumentacao biomedica"],
+    },
+    "ambiente": {
+        "label": "Engenharia do Ambiente",
+        "core": ["engenharia do ambiente", "ambiental"],
+        "related": ["tratamento de agua", "residuos", "energia renovavel",
+                    "sustentabilidade", "poluicao", "ecologia"],
+    },
+    "naval": {
+        "label": "Engenharia e Arquitetura Naval",
+        "core": ["engenharia naval", "arquitetura naval", "naval", "oceanica"],
+        "related": ["hidrodinamica", "navios", "offshore", "submarino",
+                    "oleoduto", "estruturas maritimas"],
+    },
+    "gestao": {
+        "label": "Engenharia e Gestão Industrial",
+        "core": ["engenharia e gestao industrial", "gestao industrial"],
+        "related": ["logistica", "investigacao operacional",
+                    "cadeia de abastecimento", "gestao de operacoes"],
+    },
+}
 
-RELATED_KEYWORDS = [
-    "eletronica",
-    "electronica",
-    "microeletronica",
-    "telecomunicacoes",
-    "sistemas de energia",
-    "energia eletrica",
-    "redes de energia",
-    "maquinas eletricas",
-    "acionamentos",
-    "eletronica de potencia",
-    "processamento de sinal",
-    "sistemas de decisao e controlo",
-    "instrumentacao",
-    "fotonica",
-]
+DEFAULT_AREA = "eletrotecnica"
 
-DEFAULT_KEYWORDS = CORE_KEYWORDS + RELATED_KEYWORDS
+
+def list_areas() -> list[str]:
+    return list(AREA_PROFILES.keys())
+
+
+def area_label(area: str) -> str:
+    return AREA_PROFILES.get(area, {}).get("label", area)
+
+
+def get_keywords(area: str) -> list[str]:
+    """Return the combined core+related keywords for an area profile."""
+    profile = AREA_PROFILES.get(area) or AREA_PROFILES[DEFAULT_AREA]
+    return profile["core"] + profile["related"]
 
 
 def strip_accents(text: str) -> str:
@@ -171,9 +247,24 @@ def find_area_cientifica(raw_text: str) -> str:
     return m.group(1).strip() if m else ""
 
 
-def match_keywords(raw_text: str, keywords: list[str]) -> list[str]:
+def relevant_region(raw_text: str) -> str:
+    """The parts of an edital that actually define its area, normalized.
+
+    Matching the whole PDF over-matches, because the objectives/work-plan
+    mention generic tech ('software', 'redes', ...). The authoritative signals
+    are the header ('área científica de ...' + 'Tema da Bolsa') and the
+    'Requisitos de Admissão' section (which lists the eligible degrees).
+    """
     norm = normalize(raw_text)
-    return [kw for kw in keywords if kw in norm]
+    head = norm.split("objetivos", 1)[0][:600]
+    idx = norm.find("requisitos")
+    req = norm[idx:idx + 900] if idx != -1 else ""
+    return head + " " + req
+
+
+def match_keywords(raw_text: str, keywords: list[str]) -> list[str]:
+    region = relevant_region(raw_text)
+    return [kw for kw in keywords if kw in region]
 
 
 def classify_level(tipo: str, raw_text: str) -> str:
@@ -250,10 +341,9 @@ def _enrich(bolsa: Bolsa, keywords: list[str],
     return bolsa
 
 
-def search_bolsas(keywords: list[str] | None = None,
-                  max_workers: int = 8) -> list[Bolsa]:
-    """Return the bolsas whose edital matches any of the keywords."""
-    keywords = keywords or DEFAULT_KEYWORDS
+def search_bolsas(area: str = DEFAULT_AREA, max_workers: int = 8) -> list[Bolsa]:
+    """Return the bolsas whose edital matches the given engineering area."""
+    keywords = get_keywords(area)
     session = requests.Session()
     listings = fetch_listings(session)
 
@@ -270,23 +360,24 @@ _cache: dict[str, tuple[float, list[Bolsa]]] = {}
 CACHE_TTL = 300  # seconds
 
 
-def search_bolsas_cached(keywords: list[str] | None = None) -> list[Bolsa]:
-    key = ",".join(keywords or DEFAULT_KEYWORDS)
+def search_bolsas_cached(area: str = DEFAULT_AREA) -> list[Bolsa]:
     now = time.time()
-    if key in _cache and now - _cache[key][0] < CACHE_TTL:
-        return _cache[key][1]
-    result = search_bolsas(keywords)
-    _cache[key] = (now, result)
+    if area in _cache and now - _cache[area][0] < CACHE_TTL:
+        return _cache[area][1]
+    result = search_bolsas(area)
+    _cache[area] = (now, result)
     return result
 
 
 if __name__ == "__main__":
     import sys
-    extra = sys.argv[1:]
-    kws = DEFAULT_KEYWORDS + [normalize(k) for k in extra]
-    print(f"Scraping {LISTING_URL} ...")
-    hits = search_bolsas(kws)
-    print(f"\n{len(hits)} matching bolsa(s) for Electrical Engineering:\n")
+    area = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_AREA
+    if area not in AREA_PROFILES:
+        print(f"Unknown area '{area}'. Available: {', '.join(list_areas())}")
+        sys.exit(1)
+    print(f"Scraping {LISTING_URL} for {area_label(area)} ...")
+    hits = search_bolsas(area)
+    print(f"\n{len(hits)} matching bolsa(s) for {area_label(area)}:\n")
     for b in hits:
         print(f"• {b.name}")
         print(f"    tipo: {b.tipo or 'n/a'}")
