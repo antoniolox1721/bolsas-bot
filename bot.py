@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sys
 
 import discord
 from discord.ext import commands
@@ -23,6 +24,10 @@ except ImportError:
     pass
 
 import scraper
+
+# Flush stdout immediately so startup logs appear in real time on host consoles
+# (otherwise print() is block-buffered when output isn't a terminal).
+sys.stdout.reconfigure(line_buffering=True)
 
 TOKEN = os.environ.get("DISCORD_TOKEN")
 COMMAND_PREFIX = os.environ.get("COMMAND_PREFIX", "!")
