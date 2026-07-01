@@ -8,13 +8,27 @@ Engineering keywords, and replies with the matching scholarships and links.
 
 ## Commands
 
-| Command            | Type           | What it does                                                        |
-|--------------------|----------------|--------------------------------------------------------------------|
-| `/bolsas [area]`   | slash / prefix | Lists open bolsas for an engineering area (defaults to active one) |
-| `!bolsas [area]`   | prefix         | e.g. `!bolsas mecanica` for a one-off search in another area       |
-| `/area [name]`     | slash / prefix | Show the active area + all available; pass a name to switch it     |
-| `!area mecanica`   | prefix         | Change which engineering area `bolsas` searches (persisted)        |
-| `!ant`             | prefix         | Silent owner utility (see below); no output                        |
+| Command                  | Type           | What it does                                                        |
+|--------------------------|----------------|----------------------------------------------------------------------|
+| `/bolsas [area]`         | slash / prefix | Lists open bolsas for an engineering area (defaults to active one), ranked by relevance |
+| `!bolsas [area]`         | prefix         | e.g. `!bolsas mecanica` for a one-off search in another area       |
+| `/refresh [area]`        | slash / prefix | Same as `bolsas` but bypasses the 5-minute cache                   |
+| `/area [name]`           | slash / prefix | Show the active area + all available; pass a name to switch it     |
+| `!area mecanica`         | prefix         | Change which engineering area `bolsas` searches (persisted)        |
+| `/alerts [#canal] [area]`| slash / prefix | Post an alert to a channel whenever a new bolsa is announced (requires Manage Server) |
+| `/alerts disable` / `!alerts off` | slash / prefix | Turn off alerts for the server                             |
+| `!ant`                   | prefix         | Silent owner utility (see below); no output                        |
+
+### New-scholarship alerts
+
+`!alerts #canal [area]` (or `/alerts`) marks a channel to receive a message
+whenever a bolsa is posted that wasn't there before, for the given area
+(defaults to the server's active area). A background task checks the listing
+page every `ALERT_INTERVAL_MIN` minutes (default 15, configurable via env
+var). Turning alerts on for the first time only arms future postings — it
+won't replay the bolsas that are already open. State (which channels/areas
+are subscribed, and which bolsas have already been seen) is persisted in
+`state.json`.
 
 ### Engineering areas
 
@@ -45,19 +59,29 @@ Requirements & cautions:
 ## How it works
 
 1. `scraper.fetch_listings()` parses the recruitment table (topic, deadline,
-   edital PDF link).
+   edital PDF link). Row parsing is defensive — a malformed row is skipped
+   instead of aborting the whole scrape, and HTTP requests retry with
+   backoff on transient failures (429/5xx).
 2. Each edital PDF is downloaded and its text extracted (`pypdf`).
 3. Text is normalized (lower-cased, accents and `fi`-ligatures stripped) and
-   matched against the keyword lists in `scraper.py`.
-4. Matching bolsas are returned with name, scientific area, deadline and link.
+   matched against the keyword lists in `scraper.py`. A keyword found in the
+   PDF's own declared "área científica" or project title counts far more
+   than one merely appearing near the requirements section, so results are
+   scored and sorted by relevance instead of shown in scrape order.
+4. The evaluation/selection method ("Método de Seleção" or similar) is
+   extracted from the PDF text when present.
+5. Matching bolsas are returned with name, scientific area, level, deadline,
+   evaluation method, and link.
 
-Results are cached for 5 minutes so repeated commands don't re-scrape.
+Results are cached for 5 minutes so repeated commands don't re-scrape
+(`/refresh` bypasses this).
 
 ## Tuning the keywords
 
-Edit `CORE_KEYWORDS` / `RELATED_KEYWORDS` at the top of `scraper.py`. Write them
-**lower-case and without accents** (matching is accent-insensitive). The bot
-reports which keyword matched each bolsa, so you can calibrate precision.
+Edit the keyword lists inside `AREAS` at the top of `scraper.py`. Write them
+**lower-case and without accents** (matching is accent-insensitive). Run
+`python scraper.py <area>` from the command line to see the score breakdown
+per bolsa and calibrate precision.
 
 ## Setup
 
