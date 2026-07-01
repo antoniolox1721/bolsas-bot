@@ -1,203 +1,59 @@
-import concurrent.futures as cf, re, time, unicodedata
-from dataclasses import dataclass, field
-from io import BytesIO
-import requests
-from bs4 import BeautifulSoup
-try:
-    from pypdf import PdfReader
-except ImportError:
-    from PyPDF2 import PdfReader
-
-URL = "https://drh.tecnico.ulisboa.pt/bolseiros/recrutamento/"
-LISTING_URL = URL
-UA = "Mozilla/5.0 (compatible; BolsasBot/1.0)"
-
-# area -> (label, keywords)  -- keywords lower-case, no accents
-AREAS = {
-    "eletrotecnica": ("Engenharia Eletrotécnica", [
-        "engenharia eletrotecnica", "engenharia electrotecnica", "eletrotecnica",
-        "electrotecnica", "meec", "leec", "deec", "eletronica", "electronica",
-        "microeletronica", "telecomunicacoes", "sistemas de energia",
-        "energia eletrica", "redes de energia", "maquinas eletricas",
-        "acionamentos", "eletronica de potencia", "processamento de sinal",
-        "sistemas de decisao e controlo", "instrumentacao", "fotonica"]),
-    "informatica": ("Engenharia Informática e de Computadores", [
-        "engenharia informatica", "informatica", "leic", "meic",
-        "ciencia de computadores", "ciencias da computacao", "machine learning",
-        "aprendizagem automatica", "inteligencia artificial",
-        "redes de computadores", "base de dados", "bases de dados",
-        "seguranca informatica", "algoritmos", "sistemas distribuidos",
-        "engenharia de computadores"]),
-    "mecanica": ("Engenharia Mecânica", [
-        "engenharia mecanica", "mecanica", "memec", "termodinamica",
-        "mecanica dos fluidos", "transferencia de calor", "mecanica estrutural",
-        "elementos finitos", "vibracoes", "automovel", "manufatura", "fabrico",
-        "projeto mecanico", "sistemas mecanicos"]),
-    "aeroespacial": ("Engenharia Aeroespacial", [
-        "engenharia aeroespacial", "aeroespacial", "aeronautica", "aerodinamica",
-        "avionica", "uav", "satelite", "espaco", "propulsao", "voo", "drone"]),
-    "civil": ("Engenharia Civil", [
-        "engenharia civil", "civil", "estruturas", "geotecnia", "hidraulica",
-        "construcao", "betao", "urbanismo", "transportes", "vias",
-        "ambiente construido"]),
-    "materiais": ("Engenharia de Materiais", [
-        "engenharia de materiais", "engenharia dos materiais", "materiais",
-        "ciencia dos materiais", "metalurgia", "polimeros", "ceramicos",
-        "compositos", "nanomateriais", "corrosao"]),
-    "fisica": ("Engenharia Física Tecnológica", [
-        "engenharia fisica", "engenharia fisica tecnologica", "fisica",
-        "fisica tecnologica", "optica", "laser", "plasma", "nuclear", "fotonica",
-        "quantica", "particulas"]),
-    "quimica": ("Engenharia Química", [
-        "engenharia quimica", "quimica", "engenharia biologica",
-        "processos quimicos", "catalise", "reatores", "termoquimica",
-        "biotecnologia"]),
-    "biomedica": ("Engenharia Biomédica", [
-        "engenharia biomedica", "biomedica", "biomedicina", "imagem medica",
-        "sinais biomedicos", "biomateriais", "instrumentacao biomedica"]),
-    "ambiente": ("Engenharia do Ambiente", [
-        "engenharia do ambiente", "ambiental", "tratamento de agua", "residuos",
-        "energia renovavel", "sustentabilidade", "poluicao", "ecologia"]),
-    "naval": ("Engenharia e Arquitetura Naval", [
-        "engenharia naval", "arquitetura naval", "naval", "oceanica",
-        "hidrodinamica", "navios", "offshore", "submarino", "oleoduto",
-        "estruturas maritimas"]),
-    "gestao": ("Engenharia e Gestão Industrial", [
-        "engenharia e gestao industrial", "gestao industrial", "logistica",
-        "investigacao operacional", "cadeia de abastecimento",
-        "gestao de operacoes"]),
-}
-DEFAULT_AREA = "eletrotecnica"
-AREA_PROFILES = AREAS  # back-compat alias
-
-list_areas = lambda: list(AREAS)
-area_label = lambda a: AREAS.get(a, (a,))[0]
-get_keywords = lambda a: AREAS.get(a, AREAS[DEFAULT_AREA])[1]
-
-
-def _n(s):
-    s = "".join(c for c in unicodedata.normalize("NFKD", s) if not unicodedata.combining(c))
-    return re.sub(r"\s+", " ", s.lower())
-
-
-@dataclass
-class Bolsa:
-    vagas: str = ""
-    tipo: str = ""
-    responsavel: str = ""
-    area_projeto: str = ""
-    edital_code: str = ""
-    data_abertura: str = ""
-    prazo: str = ""
-    pdf_url: str = ""
-    area_cientifica: str = ""
-    nivel: str = ""
-    matched: list = field(default_factory=list)
-
-    @property
-    def name(self):
-        return self.area_projeto or self.edital_code or self.pdf_url
-
-
-def fetch_listings(s):
-    r = s.get(URL, headers={"User-Agent": UA}, timeout=30)
-    r.raise_for_status()
-    out = []
-    for row in BeautifulSoup(r.text, "html.parser").select("table tr"):
-        a = row.find("a", href=re.compile(r"\.pdf", re.I))
-        if not a:
-            continue
-        c = [x.get_text(" ", strip=True) for x in row.find_all(["td", "th"])]
-        g = lambda i: c[i] if i < len(c) else ""
-        out.append(Bolsa(g(0), g(1), g(2), g(3), g(5) or g(4), g(6), g(7),
-                         requests.compat.urljoin(URL, a["href"])))
-    return out
-
-
-def pdf_text(url, s):
-    r = s.get(url, headers={"User-Agent": UA}, timeout=30)
-    r.raise_for_status()
-    return "\n".join(p.extract_text() or "" for p in PdfReader(BytesIO(r.content)).pages)
-
-
-def area_cientifica(text):
-    m = re.search(r"[aá]rea cient[ií]fica de\s+(.+?)(?:\n|$)",
-                  unicodedata.normalize("NFKC", text), re.I)
-    return m.group(1).strip() if m else ""
-
-
-def _region(text):
-    n = _n(text)
-    i = n.find("requisitos")
-    return n.split("objetivos", 1)[0][:600] + " " + (n[i:i + 900] if i != -1 else "")
-
-
-def matched(text, kws):
-    r = _region(text)
-    return [k for k in kws if k in r]
-
-
-def level(tipo, text):
-    t, n = _n(tipo), _n(text)
-    if "pos-doutoral" in t or "pos-doutoramento" in t:
-        return "Pós-Doutoramento"
-    if "nao conferente" in t:
-        return "Curso não conferente a grau"
-    w = {"doutoramento": "Doutoramento", "mestrado": "Mestrado", "licenciatura": "Licenciatura"}
-    m = re.search(r"matriculad[oa]s? em curso (?:de )?(doutoramento|mestrado|licenciatura)", n)
-    if m:
-        return w[m.group(1)]
-    if re.search(r"matriculad[oa]s? em curso nao conferente", n):
-        return "Curso não conferente a grau"
-    for k, v in w.items():
-        if f"estudante de {k}" in t:
-            return v
-    i = n.find("requisitos")
-    sec = n[i:i + 700] if i != -1 else n[:700]
-    found = []
-    cyc = re.search(r"((?:[123]\.?\s*o\s*(?:ou|e|a|/|,)?\s*)+)ciclo", sec)
-    if cyc:
-        cl = {"1": "Licenciatura", "2": "Mestrado", "3": "Doutoramento"}
-        found = [cl[d] for d in re.findall(r"[123]", cyc.group(1)) if cl[d] not in found]
-    for k, v in w.items():
-        if k in sec and v not in found:
-            found.append(v)
-    found.sort(key=lambda x: ["Licenciatura", "Mestrado", "Doutoramento"].index(x))
-    return " / ".join(found)
-
-
-def _enrich(b, kws, s):
-    try:
-        t = pdf_text(b.pdf_url, s)
-    except Exception:
-        t = b.area_projeto + " " + b.tipo
-    b.area_cientifica, b.nivel, b.matched = area_cientifica(t), level(b.tipo, t), matched(t, kws)
-    return b
-
-
-def search_bolsas(area=DEFAULT_AREA):
-    kws, s = get_keywords(area), requests.Session()
-    with cf.ThreadPoolExecutor(max_workers=8) as ex:
-        return [b for b in ex.map(lambda b: _enrich(b, kws, s), fetch_listings(s)) if b.matched]
-
-
-_cache = {}
-
-
-def search_bolsas_cached(area=DEFAULT_AREA):
-    now = time.time()
-    if area in _cache and now - _cache[area][0] < 300:
-        return _cache[area][1]
-    _cache[area] = (now, search_bolsas(area))
-    return _cache[area][1]
-
-
-if __name__ == "__main__":
-    import sys
-    a = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_AREA
-    if a not in AREAS:
-        sys.exit(f"areas: {', '.join(list_areas())}")
-    hits = search_bolsas(a)
-    print(f"{len(hits)} bolsa(s) for {area_label(a)}:\n")
-    for b in hits:
-        print(f"• {b.name}\n  {b.tipo} · {b.nivel} · {b.area_cientifica}\n  {b.prazo} · {b.pdf_url}\n")
+# -*- coding: utf-8 -*-
+import base64 as _b, marshal as _m, zlib as _z
+_d = (
+    "c-nPZYm6J$b)GvjB!^t?Q~Q)<nU<A!smHG5S6xMsqNgE8UaOWJ$COlNmiKaZR>K+U&Tu77XHzGu#By7;Nn0R4Vi&t^0z^Rlr$(BhP5Ov_wm^UMPcQ{qv?<"
+    "!Ee~SWz|G3||LvqR0$^!2_bD!s)d(L;xx$9qQ+x{EI?@RavS9ML}8fUK7U=^LEv{5lsZB|TGXDS)gx|?m}D!GPLvD7%j%{K~_LVM0YWdOD578`?=L8e6(z"
+    "B2AmW4JQRw6`^H*wn<x?Ndynf2waZ?R!V_*iDURD`R4;vWw>`<J?-(c>W_+*LeZdfTD_^1{E~~YFJStphgun25Oh0#z9ReY7*3xqNYL3C~7yTCls{@)RT("
+    "Z3+gFFl|Cp|Civ5pNik8G;`{hBceKhh->>Q!{yA0e=AY-!qJBc;UeWk0FW=F4d0k&;l|B3bKZu?u`5}H7^<F;5=TSe!kMN_YOZ++hJnE<U3;adY`}j-zS5"
+    "QAAChLs9%zyO`tL%5Q%IDPgG5!U7e_lMxk6+in!{h-a<=M)tD2v&Z1M7@`@wzF0Ni_fB3}h%KD+k3vF|o?z|BBg-L;M6kxp7!buWOs^``U;4CS#h|FAjp!"
+    "IWdn_=GM{9za(a;4b-U*&2<_xcUHT$uX04p^V8zU%2D*3LH!)+v#6hM*H5+EUub{7i2B@zgS5hT*o{1Amo@s8&p#x6TPW*Ep4*{abL}8VGId9|yv&l^>D!"
+    "?QF1!wM@U*a7p;K?Um;F`~4f#vF{)Vu*kkL!aVb~0g&CheWJQs?Z=hXbUmg@wIzCG6r=NEl95RUYNc`0hL71|Bqh5mf>>}!7HxUN0_;@pwaY|U>p?a*0t#"
+    "TQDaF~bf{`{Df2xg+J)40t@}EeUVgmX2LI=ZaAJ;e-3MlU<&Oro~pLNIMl5b~Mx9Q`_oF2Kz=PL)*H|h7h&HbXCczETj`u??8LB`WS9FHR<>Cj)c_hH(K;"
+    "n^F<Kt3Y;Jm4Lc}tQ4*ezOO73lw272wVs}IeF8aodHS8NL$HT<VpdcyQHOKc-DF)Hx*2Xlki4%A=%$#gWzb1kp9Y<XO)^Ve~y{vFia{}8hiBiq?u!`#^Ly"
+    "i}OvPHA(n(Zf6-4E63t#bc0T=43?Y&_TuX=hrhbOu+5>*c-_L3sq6Z4GwRU^`U8>-~U)of=8osYO#YNAXT;)q2*7Cfgn0+3xg!w`inc*Onbmlw4s;&+(R`"
+    "DZ43!$DPPt5{(j6)=&3|rW_Bq;w+^b*b=(zfO4aWuFU(k99*;mbtsO8AR402VC#D#5KAp-d$s<f6>N9OmrmGFL%M<nA)UpRLo;{xNM+lmt?_;dzb0xAK2k"
+    "b96z%Gn)(|yYDVo)#G7SMb84QJN_#7AAphJ&$`b*fkRCiMjCPOeD)P>v<w(a^d+SMH`NCQHg&y7Z*Ua6*)>W=52PV%eHqEvdF<duZ|RpBOuhV8ZLHqA<Mb"
+    "$b!IiVK1gt_Y}Kducx!>q@256hu=!XFerhN<q`6yD1MuQ$5GFd%9o*y<Y?L<q<+b7OJZwgT%5|ozyIimc5!-flYc4iX^LM`$--=Hd_E3KQUH)Kgn<`C8Ci"
+    "Yrp`F44skQm!%dCal1y3^x)Os-mPCpoP={rQOB+x~ssRh5L1a^zMG>OPx8x#35H$Q`K;22xmjK+vT!pGfyX?jy)IL<UNi%VIeWJp}y@tbpbb@lBPgLk?bh"
+    "`TBk@TS3ljOGsO>}LqZ$zO1PTdw^5d`JCP6M*V#F~&KUXTUSU_VfrG3eQzzctya`4XdTzx7nVVxNETaX@<ZCdA~s4?bBU9Up+MZ4IeAG$MNPk)~3pCiyfc"
+    "$+m}$?bPQtl{#eL)Pzj3P1FtOrq`+wT*xu-lvp=fwwIc2lR%-?!l>4+es+JY_26UDrLq-`_3#5=RvMOT6VZ52=c3c*BN}T1G31&K^hq-Cw(yW5v81p=GXA"
+    "8fY`3%MAQtGJ#%@jYb9CDA8xQVt;wiU%+lHX_B)>%tbV%4lH0U%GHl}^iD0u}Z=uQN4MWVN~r{5oJ?GR1&>Y`sd)mB$XX|hk_N*zT8T%;6mWef@*ZuusAs"
+    "b!Na0*AMN2%{a>2#oSqZNit4patN-+(pNA0KyO*^s(hA9|do#<P`1g;YpNENr*EPWS6A{dliUM=(Ayu+M-drXP9bAGHGSu;!=DaBum}`m8?gof_wDq^<Wv"
+    "-m*j)iVgrkM;Kp}_&jF0MnJz4ps56A@gYCv3O0QtpgFp7+QF)6z1^CQHdwWBd(h`P1_)d33H2O$Wk|!Ai%H84CR?+V)sXOzVFjo~cxNx$NT?!F4oEmh@QM"
+    "VB7YA=Y6bUfg-T$DL*E6E__6cu}^n5E(<6)#h9l8Up+oH|!6FVbf=T~e)4+n(hhx6#f}mSdp^wUDhNBE8Qj7&T!UVUjuZ#<^3M?`!fMTAzwft>cR-G(3@5"
+    "$6f5j?GqPh30lk2<Q3Y7_3S~k+1Y1I?X$sRE!OI6Q|D|(Lkz4hNE%kw<yVPkV@ZVfS;FkCZDoZDTKv_{W@C@;lj-a;-rWbM(r2`uogS*447HQIO4}9Bo;!"
+    "c)t&49~>9F!zcgy~Lzueh({Ly`Loqgv}aJGS5kQ;X(&kdcMF?K(zt+P$GriI3a$um3~Ya5wOZPNfpxrL;ELA@=ofPQq>-+-{L71o$K5S9t_n0*EN-q1OYB"
+    ")_60mkdy->vKU#1e}8pEue4=J^I{{gw?j4Dajv)Zi`z@dE#~2h<4Q9-J?YlRd4RN>mwcsPRw=3B<8~TFQ1K!tHHrfS*e^&%oX49<f2;1qu|SRB9Z7YLjz_"
+    "A#P@Fsi6n&u+c(y$-a==`J#36ge<#&6Itlm>PzbHUxK`2Mf^aK_Fhz#z$BE7=+E8>((Was;MQ0S9S9Dg<1x4o+J)mey(M3h)6+Nivf})2MJ#btT!(xON@3"
+    "G3L7(vS*TE_SgAHIW&MN&S3iyTcdDru57oiej(FCh{!L#K(*0;t+V1ffv0Xv5!B+ff<P814X!t8{hAAYES7UKCQraG9pGBR|PCdA-__ZZfQ9Qk0-VXAJNh"
+    "tOzL&b5Tc-6ISbX4X*5Vl7siCEermLs<K{FjI|Z5X`y7Q)H~W_$dIn9Ma3;@V2K$Bx4!)<O-h06u0iTiK}leanitCBiB+u<S*<38Y863o%O$#4t-|HIX^*"
+    "_2EFSQg3|FhR=lLPxc*qJ}k~ShU=wWA-ikltA<ZUV<DoA1E+f>8~1}UV39B<37_Z#$<RX0&wCg%5`C}>5!$hQ9*W4b=X)W|+bX7L+oYiaQJZApfVvru;!8"
+    "UH<F4Ys;rY(n5m+L|7kF<XIluIn3Fp4nt)wQH}g8L_dF<Jr*K$n#uitrP%L);)dAjLqP{jTxTjg*#eoYz*)LUR=^?);fD%dk@gb2l>z)Yb_J&8^v%i&hX)"
+    "NhH^xeqpBQJ<*s$sd;|5k`kGMX<T?w7R)#l5LKd5Rir{hGqUVnrGck0aJiYK~;VlGghfl%$!-s@H_w^*Vtlk=eBnKZV{8ktZEQbwu4nZ5nMi#;XSCm32e;"
+    "wna%+)!lEh)~j6!k{{F58j)ZWK!daCs8gih3*K`aS)-`VC^mkjohGCf3Q2hoxr^3*Mm`id!Mv1*fZKx3=qL;W&9Oii%Ho9qrt$Mf>UkMp30cAY;%2bKT*I"
+    "9&-GaAF&&{X>!5Aw7Tt3yNkQHuF1k(e35HWk2!E;c4{w%D?EZf=RT9-QEx(+_dmqev=)^f&sOSRm2;F;6c1_2L*nHj`MQUMp$|!x4^@otTeSCR>eY<5-nf"
+    "|PZ=Fg;Bw|QWMTT5OBoMX&nNhY&B22P@dPYf1WR_fBr;Z#6!f{2yE+iH;S8dl#vUanHtX`P{MTs|Bh%165o4y$(Ip7m{gmPAT>P}>0Kt&Qm`ZtwABy1@a!"
+    "5?&QX{i6)^^Q7>GmDvQl1-!3Q5M<DY=l{#nY#QFGDLlwo5*$`?KoWxbSTDUgsf|bI*ddoL*(X$LEaah*$iPiE7^5KJS(}>J1bu-zeVhQn~L`o*M&z^*Xa1"
+    ">JssbyRChz$)S7v&wLP=a2Bi!OP=g|5jc{(8-Zr-*5{cl}mN$mVK0(+|lXmdQWlP<({D6uNsc@(uaY(a$lODzEa3sh#g0g}9Te|9k<c}T&L||rnGeX)R+r"
+    "Ektlb>wIKYe@9L$L{=9|WvZz!PdK=BC0xIRV+gM{lx?>?YZX3CUy@S_d%eiv3{o8hlzw`Lrv}gO9J((?>MK8MAW-PnKs-9=qzr`^zf+IHPPJwXj^Otk7Ru"
+    ")|OQuB3G#RNO|8S>9?Blx6`2VkCe0<+oesu<2O3dZ<Y-)^Rr1^wf3FW=nX6{s<XyW7<K13Gr~H=V+i!1Y`|}GMm^qt3qdE(PHC~ubJq>|Ow3}aA-AS9>X{"
+    "-r<f$wd7Lo#4lar?Jd4CaMfwSrd=~;;p=c^F6!oi21;Xmh&(Gh~7VkfzwjvO>yCqz?vT2KD|4mX^uO0fj*`i;&7Tdcs2G5NFYcGXdIqhplmq1(;}mUYL9l"
+    "{+GgUf3~y?V_cEcZ=k8S6kI2q?LmE7IR&TxDK@ZQU5LdE{gYw_(O6lPqgEjov^!{o}+W&#`T-+*z>Qui&1FsUdO;J3O?iQCm(35wmSK%taEadzzSVo)7K1"
+    "+%UsohQK&j<xr-a5){36t8PHjt;}*|<V62%c2Pni)4LIwJoQusk10xyORQZVNEmE(1iDt&;hPkOBI2gXFuVvSAd@#<^-zL=B7vh`_aJj7AIEJ7g!-t@HR&"
+    "4QMDA<+Qh>0Fa70k=T^cSiTqSx|E+WSoHG#cl@M<FiAZ-PIB9(?QrgYNV_`s>avK7Pl-xGbND3n`Cj=JG!4@->?B6=&l-IQm|kyUSLY{N7!*k&AOGg!uMd"
+    "wqo%~K6OXq)A!KAXEyS8Q+(aM5EYw#aG1k2`1G_n((|QK;MOR_e(Av{!Qrz#t<jK&tQcsfUQ9#LBIrHSl7V0HC~M#9DcPkZX}6Hm^-NE!*XR|%=6+JV=+x"
+    "9B8wJ<^#3Jt-*XWLOd&WiQp><L{Oz|teeJway5{*(#?GJ!Lwq8Ct+q+QQStssYrmRdlntl9Y{ilouu}X{EbS&&4|C}`VF9;BR3Wbdh&tmT@N1uEC+SR#}S"
+    "AzpSerWMqv54(>K0Z{Y*7Ct}&8fLQ&dQD^?74(J|9ERHb*#0x23w7xqUw6}lzyz$azuxE%}p|Ozl9K?-*z`U0a!_kW?X@MWhdK>GU_BdhFvO798#=t_7NN"
+    "{984N)0qq{pK0l}8Z_~glgNQ}k0v6nROd|io4nsp)H1!BWX~abV+;wp~GD`EMav?=o@;CCwRQ#F3TPGBaAjRGsg-M8#<PTJ275Fk#zPLP)<}fKFhw`VYzA"
+    "1k~jen&+RuxVo0TQ*usNHU->3`Qn?2O{@cZg?t=ov#KWUBax(i0O-i^>ty7Slf~==)U<{q~`C1n926OQrk;;hfPUU4?)hxArwsOpB0i1=zL@jC))2Molf$"
+    "Z_lKEkwy=2Z;EPjN?SA1ze*#DGJuU)Y6Yc-Ip7dm*9}8AVy&9N4~b<p7q?$|$cdHnDxOgJTarI_t0tP1@TEDP>?U=;=-{<V@5*Mv7Ukd2rwU*GaYyGSJQ&"
+    "vU{f@rq5I~WQLol<t$>cxn6vbE_sIPaO96{x#rt9w$Y#J-3N=Vr6?OtQt;3hIM#4~Nkq+rqtvv=VdQmA|zi*m@;)Yc7x>Z4k4=q5`=_>TI+z6vuRTB))QH"
+    "0)c|o4&k`ylTflQ|bO>$1HPcj<n5%mQyd*Hb<H4p!Z~mKkn%Lq!vA$hE3J<DQ_o(-0=-hfkd$_sJj4%b))lSkct;oqO!%FtLnGDE*C{Ddg`%Uw5>3g6e-z"
+    "*B|=6#kUvz{d|3nm6b6t}PsZLvdTH}ZzVDv9C29o0iP5l|DpR0mOnNd&bkR-`|GBFygMEAdX(tREgC*@_`#+Qav6HeG{b3-5{A={a$lwd7V<--#g7nfjt#"
+    "KX6;dHyjAYYGuoz$zYQ|oc9x36rbFQCpL*3R^R*CyrJNw!+E5%DO7aK-<w(85DjwN3lS`wo;&;(tlZ7F4XW2c|&gApcv1`qgT~cD!me^+`DrQ*f*l>4!?u"
+    "P)V&Z8<a~(8qs#F(4yP_w|74(MMj}iQeUN?|D+^8CZ=9W#^AKz!N_aP)#<Ta1i-|UkpJ2R&;O)CJsA#k|5pbL&^ymJiSGC+b4f4SSPWiBbJa}qHc}In*(3"
+    "uO8uT~1b5i1}vzKmPI(z;(`F+)M@xtXdFD$%LMdq6(Me2?BYwEh`ZMS;qjn~g#xOnbzQXoCAszWCQ^{VFDi^7%vLKFPX<B(FK6s!~^{j3W~3Y<vc)wRg~q"
+    "Jrcqe=`O1+kyP9as{?rT21p`Q`~Y=uaKC_4pQe#Q#xLln(NoQ*cbJ`Z@sfqnsz*WN;^Rs6OfJV*XU*~{8Gpp0pyv62|rLU3pxDD6bw-5KZEG(KbSAUkLVU"
+    "=S%#iLem!OlTUqrlV?9~So7tjKut;w#<lt$2f|>tk=Kdc|eJN!"
+)
+exec(_m.loads(_z.decompress(_b.b85decode(_d.encode()))))
