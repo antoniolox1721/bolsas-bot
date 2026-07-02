@@ -17,6 +17,8 @@ Engineering keywords, and replies with the matching scholarships and links.
 | `!area mecanica`         | prefix         | Change which engineering area `bolsas` searches (persisted)        |
 | `/alerts [#canal] [area]`| slash / prefix | Post an alert to a channel whenever a new bolsa is announced (requires Manage Server) |
 | `/alerts disable` / `!alerts off` | slash / prefix | Turn off alerts for the server                             |
+| `/apply <edital>`        | slash / prefix (**DM only**) | Prepare your candidatura to a bolsa: auto-writes the Carta de Motivação, gathers your documents, and gives the submission link |
+| `!apply run <edital>`    | prefix (**DM only**) | Auto-fill the Fénix admissions form for you; add `confirm` to also seal it |
 | `!ant`                   | prefix         | Silent owner utility (see below); no output                        |
 
 ### New-scholarship alerts
@@ -29,6 +31,40 @@ var). Turning alerts on for the first time only arms future postings — it
 won't replay the bolsas that are already open. State (which channels/areas
 are subscribed, and which bolsas have already been seen) is persisted in
 `state.json`.
+
+### Applying to a bolsa (`apply`)
+
+IST research grants are submitted **exclusively** on the authenticated
+[Fénix admissions platform](https://fenix.tecnico.ulisboa.pt/fenixedu-admissions)
+(Fénix Connect login → fill the form → upload the mandatory documents → *lacrar*
+/ seal). There is no e-mail channel and no public API for submitting, so `apply`
+works in two tiers. Both are **DM-only** — the command handles your personal
+documents and, for the automated tier, your Fénix password, so it refuses to run
+in a server channel (there it just deletes your message and DMs you instead).
+
+1. **Prepare (default, no credentials needed).** `!apply BL127` reads the
+   documents the edital requires, checks the files in your profile, **generates a
+   tailored Carta de Motivação** for that bolsa, bundles an upload-ready folder,
+   and DMs you the submission link + a ✅/❌ checklist (with the generated letter
+   attached). You upload the folder on the platform and click submit.
+2. **Autopilot (opt-in).** `!apply run BL127` launches a headless browser
+   (Playwright), logs in with **your own** Fénix Connect credentials, opens the
+   matching call, uploads your documents, and stops at the review screen with a
+   screenshot — **nothing is sealed**. Add `confirm` (`!apply run BL127 confirm`)
+   to also seal the candidatura. Sealing is irreversible.
+
+Set up your applicant profile once by copying `profile.example.json` to
+`profile.json` (same folder as `bot.py`) and filling in your name, contacts, and
+the paths to your CV, Certificado de Habilitações and Comprovativo de Matrícula.
+`profile.json` is git-ignored. For the autopilot tier, also set `FENIX_USER` /
+`FENIX_PASS` (env vars preferred over putting them in `profile.json`).
+
+> **Caveats.** The autopilot drives a live, authenticated, JavaScript form whose
+> field names can't be inspected without an account, so its selectors are
+> best-effort and overridable via `APPLY_SELECTORS` — always review the
+> screenshot before sealing. It also needs a real host with a browser
+> (`playwright install chromium`); it will not run on the free bot panels in
+> `DEPLOY.md`. The prepare tier works everywhere and is the recommended path.
 
 ### Engineering areas
 

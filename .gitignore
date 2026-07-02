@@ -5,3 +5,8 @@ __pycache__/
 venv/
 state.json
 backup/
+profile.json
+applications/
+*.decoded
+.scraper_cache.json
+.fenix_session.json

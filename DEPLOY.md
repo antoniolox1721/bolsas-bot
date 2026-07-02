@@ -18,7 +18,8 @@ Render free web services) do **not** work here — these bot panels do.
 1. Sign up at <https://bot-hosting.net> (Discord login, no card).
 2. **Create Server → Python.**
 3. Open the server's **File Manager** and upload these files (keep the layout):
-   `bot.py`, `scraper.py`, `requirements.txt`, and the `assets/` folder.
+   `bot.py`, `scraper.py`, `apply.py`, `requirements.txt`, and the `assets/`
+   folder. (For the `apply` command, also upload your filled-in `profile.json`.)
    (You can drag-and-drop, or upload a zip and unzip it in the panel.)
 4. **Startup tab:**
    - Set the app/Python file to **`bot.py`**.
@@ -35,6 +36,15 @@ Render free web services) do **not** work here — these bot panels do.
 ### Making changes later (no Git)
 Edit the file in the panel's **web editor** (or re-upload it), then click
 **Restart**. Done — nothing on your PC required.
+
+### The `apply` command on a host
+`!apply <edital>` (package preparation + generated Carta de Motivação) works on
+these panels — just upload `profile.json` alongside the code. The **autopilot**
+(`!apply run`), however, drives a real Chromium browser via Playwright and needs
+`playwright install chromium` plus more memory than the free panels give, so it
+won't run there. Use autopilot on your own machine / a VPS, or just use the
+prepare tier and click submit yourself. Set `FENIX_USER` / `FENIX_PASS` as
+environment variables (never commit them) if you do run the autopilot.
 
 ---
 

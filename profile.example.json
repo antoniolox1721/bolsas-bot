@@ -1,0 +1,23 @@
+{
+  "_comment": "Copy this file to profile.json (same folder as bot.py) and fill it in. profile.json is git-ignored — it holds your personal data and, optionally, your Fénix password, so never commit it.",
+
+  "name": "Ana Exemplo Silva",
+  "email": "ana.silva@tecnico.ulisboa.pt",
+  "phone": "+351 912 345 678",
+  "degree": "estudante de doutoramento em Engenharia Eletrotécnica e de Computadores",
+
+  "documents": {
+    "cv": "/caminho/para/CV.pdf",
+    "habilitacoes": "/caminho/para/Certificado_de_Habilitacoes.pdf",
+    "matricula": "/caminho/para/Comprovativo_de_Matricula.pdf"
+  },
+
+  "_motivation_comment": "A Carta de Motivação é gerada automaticamente para cada bolsa. Para escrever a tua, aponta 'documents.motivacao' para um ficheiro; para ajustar o texto gerado usa 'motivation_note' (parágrafo extra) ou 'motivation_template' (caminho para um .txt com os campos {name} {edital} {title_clause} {area_clause} {degree_clause} {contact} {custom} {today}).",
+  "motivation_note": "",
+
+  "_fenix_comment": "Só necessário para 'apply run' (automação do formulário). Prefere pôr isto em variáveis de ambiente FENIX_USER / FENIX_PASS em vez de aqui.",
+  "fenix": {
+    "username": "",
+    "password": ""
+  }
+}
