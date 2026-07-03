@@ -9,6 +9,6 @@ profile.json
 applications/
 *.decoded
 .scraper_cache.json
-.fenix_session.json
+.fenix_session*.json
 profiles/
 docs/
