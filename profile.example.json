@@ -1,5 +1,5 @@
 {
-  "_comment": "Copy this file to profile.json (same folder as bot.py) and fill it in. profile.json is git-ignored — it holds your personal data and, optionally, your Fénix password, so never commit it.",
+  "_comment": "Copy this file to profile.json (same folder as bot.py) and fill it in. profile.json is git-ignored — it holds your personal data and, optionally, your Fénix password, so never commit it. The portal only accepts PDF uploads.",
 
   "name": "Ana Exemplo Silva",
   "email": "ana.silva@tecnico.ulisboa.pt",
@@ -12,8 +12,30 @@
     "matricula": "/caminho/para/Comprovativo_de_Matricula.pdf"
   },
 
-  "_motivation_comment": "A Carta de Motivação é gerada automaticamente para cada bolsa. Para escrever a tua, aponta 'documents.motivacao' para um ficheiro; para ajustar o texto gerado usa 'motivation_note' (parágrafo extra) ou 'motivation_template' (caminho para um .txt com os campos {name} {edital} {title_clause} {area_clause} {degree_clause} {contact} {custom} {today}).",
+  "_motivation_comment": "A Carta de Motivação é gerada automaticamente para cada bolsa. Para usar a TUA carta, aponta 'documents.motivacao' para o teu PDF. 'motivation_mode': 'auto' (padrão: gera quando não forneces) ou 'own' (usa só a tua; se faltar, avisa em vez de gerar). Para ajustar o texto gerado usa 'motivation_note' (parágrafo extra) ou 'motivation_template' (caminho para um .txt com os campos {name} {edital} {title_clause} {area_clause} {degree_clause} {contact} {custom} {today}).",
+  "motivation_mode": "auto",
   "motivation_note": "",
+
+  "_qualifications_comment": "Habilitações a preencher no formulário (secção Qualifications), cada uma com o PDF do certificado/comprovativo em 'proof'. Datas em DD/MM/YYYY.",
+  "qualifications": [
+    {
+      "country": "Portugal",
+      "level": "Licenciatura",
+      "institution": "Instituto Superior Técnico",
+      "course": "Engenharia Eletrotécnica e de Computadores",
+      "start": "01/09/2020",
+      "end": "31/07/2023",
+      "proof": "/caminho/para/Certificado_Licenciatura.pdf"
+    }
+  ],
+
+  "_activities_comment": "Experiência/atividades relevantes (secção Other Activities and Competencies), cada uma com PDF comprovativo em 'proof'.",
+  "activities": [
+    {
+      "description": "Estágio de verão em desenvolvimento de software no INESC-ID (jul–set 2024).",
+      "proof": "/caminho/para/Comprovativo_Estagio.pdf"
+    }
+  ],
 
   "_fenix_comment": "Só necessário para 'apply run' (automação do formulário). Prefere pôr isto em variáveis de ambiente FENIX_USER / FENIX_PASS em vez de aqui.",
   "fenix": {

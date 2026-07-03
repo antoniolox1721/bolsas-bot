@@ -10,3 +10,5 @@ applications/
 *.decoded
 .scraper_cache.json
 .fenix_session.json
+profiles/
+docs/

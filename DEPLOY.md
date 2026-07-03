@@ -19,8 +19,12 @@ Render free web services) do **not** work here — these bot panels do.
 2. **Create Server → Python.**
 3. Open the server's **File Manager** and upload these files (keep the layout):
    `bot.py`, `scraper.py`, `apply.py`, `requirements.txt`, and the `assets/`
-   folder. (For the `apply` command, also upload your filled-in `profile.json`.)
-   (You can drag-and-drop, or upload a zip and unzip it in the panel.)
+   folder. (You can drag-and-drop, or upload a zip and unzip it in the panel.)
+   No document uploads needed: each user builds their profile **over Discord
+   DM** (`!apply set …` for data, `!apply doc cv` + PDF attachment for
+   documents) — the bot stores them in `profiles/` and `docs/` by itself.
+   `profile.json` (copy `profile.example.json`) is only for the advanced
+   owner flow with qualifications/activities lists.
 4. **Startup tab:**
    - Set the app/Python file to **`bot.py`**.
    - Make sure dependencies install on boot. Either set the panel's
@@ -36,15 +40,6 @@ Render free web services) do **not** work here — these bot panels do.
 ### Making changes later (no Git)
 Edit the file in the panel's **web editor** (or re-upload it), then click
 **Restart**. Done — nothing on your PC required.
-
-### The `apply` command on a host
-`!apply <edital>` (package preparation + generated Carta de Motivação) works on
-these panels — just upload `profile.json` alongside the code. The **autopilot**
-(`!apply run`), however, drives a real Chromium browser via Playwright and needs
-`playwright install chromium` plus more memory than the free panels give, so it
-won't run there. Use autopilot on your own machine / a VPS, or just use the
-prepare tier and click submit yourself. Set `FENIX_USER` / `FENIX_PASS` as
-environment variables (never commit them) if you do run the autopilot.
 
 ---
 
@@ -113,12 +108,29 @@ Update later: `git pull && sudo systemctl restart bolsas-bot`.
 
 ---
 
+## Free tier limits (256 MB RAM · 25% CPU · 512 MB disk)
+
+The bot is sized for exactly this plan:
+
+- `requirements.txt` installs only the lean core (~60 MB of packages); the bot
+  idles at well under 128 MB RSS (no message cache, no guild chunking).
+- **`apply run` (browser automation) is NOT available on this tier** —
+  Playwright + Chromium need ~500 MB disk and more than 256 MB RAM. It's
+  commented out in `requirements.txt`; the bot detects its absence and tells
+  the user to prepare manually. Everything else — `!bolsas`, alerts,
+  `!apply <edital>` package + generated Carta de Motivação (PDF via
+  reportlab) — works fully. Run `apply run` from your own PC when needed.
+- `.scraper_cache.json` persists parsed editais between restarts, so a restart
+  is ready in ~0.3 s and re-downloads nothing; it stays a few tens of KB.
+- The free plan needs **manual renewal every 4 days** — set a reminder, or the
+  server stops.
+
 ## Notes that apply to any host
 
 - The bot needs the **Message Content Intent** enabled in the Discord Developer
   Portal only for the `!bolsas` text command. The `/bolsas` slash command works
   without it.
 - Resource use is tiny: it idles near-zero and only scrapes when someone runs
-  the command (results are cached 5 min). 128 MB RAM is plenty.
+  the command (results are cached 5 min in RAM and forever per-edital on disk).
 - Never commit or paste your token anywhere public. If it leaks, regenerate it
   in the Developer Portal.

@@ -1,11 +1,16 @@
+# Core — this is all the free-tier host needs (256 MB RAM / 512 MB disk):
 discord.py>=2.3,<3
 requests>=2.28
 beautifulsoup4>=4.11
 pypdf>=4.0
 python-dotenv>=1.0
-# apply: optional. reportlab renders the generated Carta de Motivação as PDF
-# (falls back to .txt if absent); playwright drives the `apply run` automation
-# (also needs `playwright install chromium`). Neither is required for `!bolsas`
-# or for plain `!apply <edital>` package preparation.
+# reportlab renders the generated Carta de Motivação as PDF (the portal only
+# accepts PDF); small enough for the free tier. Falls back to .txt if absent.
 reportlab>=4.0
-playwright>=1.40
+
+# Optional — `apply run` browser automation. Playwright + Chromium need
+# ~500 MB disk and >256 MB RAM, which does NOT fit the free hosting tier;
+# install only where resources allow (e.g. your own machine):
+#   pip install playwright && playwright install chromium
+# Everything else (!bolsas, alerts, !apply <edital> preparation) works without it.
+# playwright>=1.40
