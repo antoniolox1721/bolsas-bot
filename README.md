@@ -19,6 +19,9 @@ Engineering keywords, and replies with the matching scholarships and links.
 | `/alerts disable` / `!alerts off` | slash / prefix | Turn off alerts for the server                             |
 | `/apply <edital>`        | slash / prefix (**DM only**) | Prepare your candidatura to a bolsa: auto-writes the Carta de Motivação, gathers your documents, and gives the submission link |
 | `!apply run <edital>`    | prefix (**DM only**) | Auto-fill the Fénix admissions form for you; add `confirm` to also seal it |
+| `/ban <membro> [motivo]` | slash / prefix | Ban a member (requires the **Ban Members** permission)             |
+| `/unban <id>`            | slash / prefix | Unban a user by their Discord ID (requires **Ban Members**)        |
+| `/bans`                  | slash / prefix | List currently banned users (requires **Ban Members**)             |
 | `!ant`                   | prefix         | Silent owner utility (see below); no output                        |
 
 ### New-scholarship alerts
@@ -74,6 +77,16 @@ biomédica, ambiente, naval, gestão). The active area is remembered across
 restarts in `state.json`. Change it with `!area <name>` or `/area`. Each area's
 keyword lists live in `AREA_PROFILES` at the top of `scraper.py` and are easy
 to tune — write keywords lower-case and without accents.
+
+### Moderation (`ban` / `unban` / `bans`)
+
+`ban`/`unban`/`bans` check the *invoking Discord member's own* **Ban Members**
+permission (same convention as `/alerts` requiring **Manage Server**) — not a
+hard-coded user id. `ban` also refuses to act on yourself or on a member whose
+top role is equal to or higher than the invoker's, unless the invoker is the
+server owner. The **bot itself** also needs the **Ban Members** permission in
+that server (see the invite step below) or these commands fail with a
+permission error even for a member who has it.
 
 ### `!ant` (silent admin utility)
 
@@ -135,7 +148,10 @@ python bot.py
    `!bolsas`).
 4. Upload `assets/bot.png` as the bot's avatar.
 5. Invite the bot with the `applications.commands` and `bot` scopes and the
-   *Send Messages* permission.
+   *Send Messages* permission. Also check **Ban Members** if you want
+   `ban`/`unban`/`bans` to work in that server — without it those commands
+   fail with a permission error regardless of the invoking member's own
+   permissions.
 
 ## Test the scraper without Discord
 
@@ -143,3 +159,42 @@ python bot.py
 python scraper.py                 # run with the default keywords
 python scraper.py "fisica"        # add extra ad-hoc keywords
 ```
+
+## Web console
+
+`console.py` is a small, dependency-free (stdlib `http.server`) web UI for
+`bolsas`/`refresh` — pick an area, get the same results `!bolsas` would give,
+from a browser instead of Discord. It calls `scraper.py` directly, so no bot
+token or Discord round-trip is involved, and it's read-only (public
+scholarship data). Runs on port 5005 by default (`CONSOLE_PORT` to change):
+
+```bash
+python console.py
+```
+
+It intentionally does **not** expose `apply`/`fenix`/`ant`/`ban`/`unban` —
+those handle credentials, an irreversible submission, an admin-role grant, or
+guild moderation, and are left to Discord itself (and `cli.py` for
+ban/unban — see below) rather than an unauthenticated web form.
+
+## Command-line interface
+
+`cli.py` covers the same `bolsas`/`refresh`/`areas` as the web console, plus
+`ban`/`unban`/`bans` via Discord's REST API directly (using `DISCORD_TOKEN`,
+no Gateway connection — safe to run alongside a live `bot.py`):
+
+```bash
+python cli.py bolsas eletrotecnica [--refresh]
+python cli.py areas
+python cli.py bans [--guild ID]
+python cli.py ban <user_id> [--reason "..."] [--guild ID]
+python cli.py unban <user_id> [--guild ID]
+```
+
+`--guild` is only required if the bot is in more than one server (omit it to
+get a list of guild IDs to choose from). `ban`/`unban` prompt for `y/N`
+confirmation unless `-y`/`--yes` is passed. Unlike the Discord commands, the
+CLI does **not** check any per-invoker Discord permission — it acts with the
+bot's own permissions, so anything that can run this script can ban/unban.
+Scope access to this script accordingly (e.g. restrict who can log into the
+host it runs on).
