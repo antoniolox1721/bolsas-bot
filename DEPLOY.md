@@ -106,6 +106,34 @@ sudo systemctl enable --now bolsas-bot
 
 Update later: `git pull && sudo systemctl restart bolsas-bot`.
 
+### Optional: auto-deploy on push (GitHub Actions)
+
+If your host isn't reachable from the public internet (e.g. it's only on
+Tailscale, like a home server), `.github/workflows/deploy.yml` automates the
+`git pull && systemctl restart` step above on every push to `master`:
+
+1. The workflow uses [`tailscale/github-action`](https://github.com/tailscale/github-action)
+   to join the runner to your tailnet for the duration of the job. Create an
+   OAuth client for this at
+   <https://login.tailscale.com/admin/settings/oauth> (scope: enough to
+   register an ephemeral device; tag it e.g. `tag:ci`), and add
+   `TS_OAUTH_CLIENT_ID` / `TS_OAUTH_CLIENT_SECRET` as repo secrets.
+2. Make sure your tailnet's ACL (Access Controls, same admin console) allows
+   `tag:ci` to reach your host on port 22 — `tag:ci` needs to exist in
+   `tagOwners` either way (Tailscale requires OAuth-issued devices to carry a
+   tag).
+3. Generate a **dedicated** SSH keypair for deploys — don't reuse your normal
+   key. Add the private half as the `DEPLOY_SSH_KEY` repo secret. On the host,
+   restrict the public half in `authorized_keys` to a forced command instead
+   of a normal shell, so a leaked key still can't do anything else:
+   ```
+   command="cd /path/to/bolsas-bot && git pull --ff-only && sudo systemctl restart bolsas-bot",no-agent-forwarding,no-port-forwarding,no-pty,no-X11-forwarding,no-user-rc ssh-ed25519 AAAA... deploy-key
+   ```
+4. Update the `host:` in the workflow to your host's Tailscale IP/hostname.
+
+Every push that touches `bot.py`/`scraper.py`/`apply.py`/`requirements.txt`
+then deploys itself within a minute or two of landing on `master`.
+
 ---
 
 ## Free tier limits (256 MB RAM · 25% CPU · 512 MB disk)
